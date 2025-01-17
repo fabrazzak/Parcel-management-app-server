@@ -28,6 +28,10 @@ app.get('/', (req, res) => {
 async function run() {
     try {
         const userCollection = client.db("parcel-management").collection("users");
+        const bookParcelCollection = client.db("parcel-management").collection("book-parcel");
+
+
+        // webUser api start 
 
         app.post("/users", async (req, res) => {
             const newUser = req.body;
@@ -87,7 +91,8 @@ async function run() {
         app.get("/user/:email", async (req, res) => {
 
             const query =req.params;  
-                    
+            console.log(query)
+                     
             try {
                 const user = await userCollection.findOne(query)
                 
@@ -99,9 +104,27 @@ async function run() {
         });
 
 
+
+        // webUser api end 
+
+
+
+        // user book parcel api 
+
+
+         app.post("/book-parcel",async(req,res)=>{
+            const bookParcel=req.body;
+            try{
+                const result= await bookParcelCollection.insertOne(bookParcel)
+                return res.status(201).send(result)
+            }
+            catch(error){
+                console.log("Error inserting book parcel", error)
+                return res.status(5000).send({message:"Internal server error"})
+
+            }
+         })
           
-
-
   
 
 
