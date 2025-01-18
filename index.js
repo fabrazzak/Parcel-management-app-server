@@ -8,7 +8,7 @@ app.use(cors())
 app.use(express.json())
 
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `${process.env.DB_URI}`
 
 const client = new MongoClient(uri, {
@@ -72,8 +72,7 @@ async function run() {
         app.put("/users", async (req, res) => {
             const {email} = req.body;
             const { role } = req.body;  
-            console.log(email,role)
-          
+                     
             try {
               const result = await userCollection.updateOne({ email: email },{ $set: { role } });          
               if (result.matchedCount > 0) {
@@ -90,8 +89,8 @@ async function run() {
           
         app.get("/user/:email", async (req, res) => {
 
-            const query =req.params;  
-            console.log(query)
+            const query =req.params;
+            
                      
             try {
                 const user = await userCollection.findOne(query)
@@ -125,6 +124,86 @@ async function run() {
             }
          })
           
+
+         app.get("/book-parcels/:email", async (req, res) => {
+            const { email } = req.params; 
+                       
+            try {               
+                const user = await bookParcelCollection.find({ email }).toArray();                
+               
+                if (user.length === 0) {
+                    return res.status(404).send({ message: "User not found" });
+                }
+                
+                // Send the found user
+                res.status(200).send(user);
+            } catch (error) {
+                console.error('Error fetching users:', error);
+                return res.status(500).send({ message: 'Internal server error' });
+            }
+        });
+        
+
+
+      
+
+        app.put("/book-parcel", async (req, res) => {
+            const { id, bookingStatus } = req.body;
+            
+            // Validate input
+            if (!id || !bookingStatus) {
+                return res.status(400).send({ message: "Invalid input. Both id and bookingStatus are required." });
+            }
+        
+            const query = { _id: new ObjectId(id) };
+         
+            try { 
+                const result = await bookParcelCollection.updateOne(query, { $set: { status: bookingStatus } });
+                
+                if (result.matchedCount > 0) {
+                    res.status(200).send({ message: "Status update done" });
+                } else {
+                    res.status(404).send({ message: "Book Parcel not found" });
+                }
+            } catch (error) {
+                console.error("Error updating status:", error);
+                res.status(500).send({ message: "Internal server error" });
+            }
+        });
+        
+        
+
+        app.put("/update-book-parcel", async (req, res) => {
+          const parcelInfo = req.body; // Data sent in the request body
+          const id = parcelInfo._id;
+
+        
+          if (!id) {
+            return res.status(400).send({ message: "Invalid input. Parcel ID is required." });
+          }
+
+          const {_id,...updateData}=parcelInfo;
+        
+          // Construct the query and update payload
+          const query = { _id: new ObjectId(id) };
+          const updatePayload = { $set: updateData }; 
+        
+          try {
+            const result = await bookParcelCollection.updateOne(query, updatePayload);
+        
+            if (result.matchedCount > 0) {
+              res.status(200).send({ message: "Parcel information updated successfully." });
+            } else {
+              res.status(404).send({ message: "Parcel not found." });
+            }
+          } catch (error) {
+            console.error("Error updating parcel:", error);
+            res.status(500).send({ message: "Internal server error." });
+          }
+        });
+        
+       
+
   
 
 
