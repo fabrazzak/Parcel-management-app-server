@@ -84,6 +84,22 @@ async function run() {
               console.error("Error updating user role:", error);
               res.status(500).send({ message: "Internal server error" });
             }
+          }); 
+             app.put("/users-photourl", async (req, res) => {
+            const {email} = req.body;
+            const { photoURL } = req.body;  
+                     
+            try {
+              const result = await userCollection.updateOne({ email: email },{ $set: { photoURL } });          
+              if (result.matchedCount > 0) {
+                res.status(200).send({ message: `PhotoURL updated successfully ` });
+              } else {
+                res.status(404).send({ message: "User not found" });
+              }
+            } catch (error) {
+              console.error("Error updating user role:", error);
+              res.status(500).send({ message: "Internal server error" });
+            }
           });
 
           
@@ -126,15 +142,14 @@ async function run() {
           
 
          app.get("/book-parcels/:email", async (req, res) => {
-            const { email } = req.params; 
-                       
+            const { email } = req.params;                        
             try {               
                 const user = await bookParcelCollection.find({ email }).toArray();                
                
                 if (user.length === 0) {
                     return res.status(404).send({ message: "User not found" });
-                }
-                
+                }  
+                     
                 // Send the found user
                 res.status(200).send(user);
             } catch (error) {
@@ -203,6 +218,24 @@ async function run() {
         });
         
        
+        
+        app.get("/all-book-parcels", async (req, res) => {
+            const { filter} = req.body;                        
+            try {               
+                const user = await bookParcelCollection.find().toArray();                
+               
+                if (user.length === 0) {
+                    return res.status(404).send({ message: "User not found" });
+                }  
+                     
+                // Send the found user
+                res.status(200).send(user);
+            } catch (error) {
+                console.error('Error fetching users:', error);
+                return res.status(500).send({ message: 'Internal server error' });
+            }
+        });
+        
 
   
 
