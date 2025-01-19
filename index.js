@@ -248,7 +248,8 @@ async function run() {
 
 
         app.put("/book-parcel-reviews", async (req, res) => {
-            const { id, ...deliveryInfo } = req.body;             
+            const { id, ...deliveryInfo } = req.body;
+                        
         
             if (!id) {
                 return res.status(400).send({ message: "Parcel ID is required." });
@@ -372,15 +373,19 @@ async function run() {
         app.get("/delivery-man-reviews", async (req, res) => {
             const { deliveryManID } = req.query; // Get deliveryManID from the query parameters
         
-            if (!deliveryManID) {
-                return res.status(400).send({ message: "DeliveryManID is required." });
+            // Validate the deliveryManID format
+            if (!deliveryManID || !ObjectId.isValid(deliveryManID)) {
+                return res.status(400).send({ message: "Valid DeliveryManID is required." });
             }
         
             try {
                 // Query to find all parcels associated with the delivery man
-                const reviews = await bookParcelCollection
-                    .find(
-                        { deliveryManID, feedback: { $exists: true }, rating: { $exists: true } }, // Filter for parcels with feedback and rating
+                const reviews = await bookParcelCollection .find(
+                        { 
+                            deliveryManID, 
+                            feedback: { $exists: true }, 
+                            rating: { $exists: true } 
+                        },
                         {
                             projection: {
                                 name: 1,
@@ -390,14 +395,12 @@ async function run() {
                                 rating: 1,
                                 bookingDate: 1,
                                 deliveryDate: 1,
-                                photoURL:1,
+                                photoURL: 1,
                             },
                         }
                     )
                     .toArray();
-                   
-                    
-                    
+            
         
                 if (reviews.length === 0) {
                     return res.status(404).send({ message: "No reviews found for this delivery man." });
