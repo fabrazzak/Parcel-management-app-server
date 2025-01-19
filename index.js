@@ -97,11 +97,6 @@ app.get("/users", async (req, res) => {
 
 
 
-
-
-
-
-
         app.put("/users", async (req, res) => {
             const { email } = req.body;
             const { role } = req.body;
@@ -289,6 +284,52 @@ app.get("/users", async (req, res) => {
                 return res.status(500).send({ message: "Internal server error" });
             }
         });
+
+
+
+
+
+
+
+        
+
+        app.put("/assign-book-parcel", async (req, res) => {
+            const deliveryInfo = req.body; // Data sent in the request body
+            const id = deliveryInfo.parcelId;
+            console.log(req.body)
+
+
+            if (!id) {
+                return res.status(400).send({ message: "Invalid input. Parcel ID is required." });
+            }
+
+            const { parcelId, ...updateData } = deliveryInfo;
+
+            // Construct the query and update payload
+            const query = { _id: new ObjectId(id) };
+            const updatePayload = { $set: updateData };
+
+            try {
+                const result = await bookParcelCollection.updateOne(query, updatePayload);
+
+                if (result.matchedCount > 0) {
+                    res.status(200).send({ message: "Parcel assign successfully." });
+                } else {
+                    res.status(404).send({ message: "Parcel not found." });
+                }
+            } catch (error) {
+                console.error("Error updating parcel:", error);
+                res.status(500).send({ message: "Internal server error." });
+            }
+        });
+
+
+
+
+
+
+
+
 
 
 
