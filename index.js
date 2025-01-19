@@ -46,52 +46,52 @@ async function run() {
                 const result = await userCollection.insertOne(newUser);
                 return res.status(201).send(result);
             } catch (error) {
-                console.error("Error inserting user:", error);
+               
                 return res.status(500).send({ message: "Internal server error" });
             }
         });
 
 
 
-// API to get all users with pagination and additional functionality
-app.get("/users", async (req, res) => {
-    const page = parseInt(req.query.page) || 1; // Default to page 1
-    const limit = parseInt(req.query.limit) || 5; // Default to 5 users per page
-    const skip = (page - 1) * limit;
+        // API to get all users with pagination and additional functionality
+        app.get("/users", async (req, res) => {
+            const page = parseInt(req.query.page) || 1; // Default to page 1
+            const limit = parseInt(req.query.limit) || 5; // Default to 5 users per page
+            const skip = (page - 1) * limit;
 
-    try {
-        // Fetch users with pagination
-        const users = await userCollection.find().skip(skip).limit(limit).toArray();
+            try {
+                // Fetch users with pagination
+                const users = await userCollection.find().skip(skip).limit(limit).toArray();
 
-        
-        const enhancedUsers = await Promise.all(
-            users.map(async (user) => {
-                const parcelCount = await bookParcelCollection.countDocuments({ userId: user._id, status: { $ne: "canceled" } }); // Exclude canceled parcels
-                const totalSpent = await bookParcelCollection.aggregate([
-                    { $match: { userId: user._id, status: { $ne: "canceled" } } },
-                    { $group: { _id: null, totalCost: { $sum: "$price" } } },
-                ]).toArray();
 
-                const phoneNumber = user.phoneNumber || (await bookParcelCollection.findOne({ userId: user._id }).phoneNumber);
+                const enhancedUsers = await Promise.all(
+                    users.map(async (user) => {
+                        const parcelCount = await bookParcelCollection.countDocuments({ userId: user._id, status: { $ne: "canceled" } }); // Exclude canceled parcels
+                        const totalSpent = await bookParcelCollection.aggregate([
+                            { $match: { userId: user._id, status: { $ne: "canceled" } } },
+                            { $group: { _id: null, totalCost: { $sum: "$price" } } },
+                        ]).toArray();
 
-                return {
-                    ...user,
-                    parcelsBooked: parcelCount || 0,
-                    totalSpentAmount: totalSpent[0]?.totalCost || 0,
-                    phoneNumber: phoneNumber || "N/A", // Optional: If no phone number is found in the user data
-                };
-            })
-        );
+                        const phoneNumber = user.phoneNumber || (await bookParcelCollection.findOne({ userId: user._id }).phoneNumber);
 
-        const totalUsers = await userCollection.countDocuments();
-        const totalPages = Math.ceil(totalUsers / limit);
+                        return {
+                            ...user,
+                            parcelsBooked: parcelCount || 0,
+                            totalSpentAmount: totalSpent[0]?.totalCost || 0,
+                            phoneNumber: phoneNumber || "N/A", // Optional: If no phone number is found in the user data
+                        };
+                    })
+                );
 
-        res.status(200).send({ users: enhancedUsers, totalPages, totalUsers });
-    } catch (error) {
-        console.error("Error fetching users:", error);
-        return res.status(500).send({ message: "Internal server error" });
-    }
-});
+                const totalUsers = await userCollection.countDocuments();
+                const totalPages = Math.ceil(totalUsers / limit);
+
+                res.status(200).send({ users: enhancedUsers, totalPages, totalUsers });
+            } catch (error) {
+            
+                return res.status(500).send({ message: "Internal server error" });
+            }
+        });
 
 
 
@@ -109,7 +109,7 @@ app.get("/users", async (req, res) => {
                     res.status(404).send({ message: "User not found" });
                 }
             } catch (error) {
-                console.error("Error updating user role:", error);
+                
                 res.status(500).send({ message: "Internal server error" });
             }
         });
@@ -125,7 +125,7 @@ app.get("/users", async (req, res) => {
                     res.status(404).send({ message: "User not found" });
                 }
             } catch (error) {
-                console.error("Error updating user role:", error);
+               
                 res.status(500).send({ message: "Internal server error" });
             }
         });
@@ -141,7 +141,7 @@ app.get("/users", async (req, res) => {
 
                 res.status(200).send(user);
             } catch (error) {
-                console.error('Error fetching users:', error);
+               
                 return res.status(500).send({ message: 'Internal server error' });
             }
         });
@@ -162,7 +162,7 @@ app.get("/users", async (req, res) => {
                 return res.status(201).send(result)
             }
             catch (error) {
-                console.log("Error inserting book parcel", error)
+             
                 return res.status(5000).send({ message: "Internal server error" })
 
             }
@@ -181,7 +181,7 @@ app.get("/users", async (req, res) => {
                 // Send the found user
                 res.status(200).send(user);
             } catch (error) {
-                console.error('Error fetching users:', error);
+               
                 return res.status(500).send({ message: 'Internal server error' });
             }
         });
@@ -209,7 +209,7 @@ app.get("/users", async (req, res) => {
                     res.status(404).send({ message: "Book Parcel not found" });
                 }
             } catch (error) {
-                console.error("Error updating status:", error);
+                
                 res.status(500).send({ message: "Internal server error" });
             }
         });
@@ -240,10 +240,37 @@ app.get("/users", async (req, res) => {
                     res.status(404).send({ message: "Parcel not found." });
                 }
             } catch (error) {
+              
+                res.status(500).send({ message: "Internal server error." });
+            }
+        });
+
+
+
+        app.put("/book-parcel-reviews", async (req, res) => {
+            const { id, ...deliveryInfo } = req.body;             
+        
+            if (!id) {
+                return res.status(400).send({ message: "Parcel ID is required." });
+            }
+        
+            const query = { _id: new ObjectId(id) }; // Convert `id` to MongoDB ObjectId
+            const updatePayload = { $set: deliveryInfo };
+        
+            try {
+                const result = await bookParcelCollection.updateOne(query, updatePayload);
+        
+                if (result.matchedCount > 0) {
+                    res.status(200).send({ message: "Parcel information updated successfully." });
+                } else {
+                    res.status(404).send({ message: "Parcel not found." });
+                }
+            } catch (error) {
                 console.error("Error updating parcel:", error);
                 res.status(500).send({ message: "Internal server error." });
             }
         });
+        
 
 
 
@@ -259,7 +286,7 @@ app.get("/users", async (req, res) => {
                 // Send the found user
                 res.status(200).send(user);
             } catch (error) {
-                console.error('Error fetching users:', error);
+                
                 return res.status(500).send({ message: 'Internal server error' });
             }
         });
@@ -280,7 +307,26 @@ app.get("/users", async (req, res) => {
 
                 res.status(200).send({ deliveryMan, totalPages, totalDeliveryMan });
             } catch (error) {
-                console.error("Error fetching users:", error);
+                
+                return res.status(500).send({ message: "Internal server error" });
+            }
+        });
+
+
+        // my delivery list 
+
+        app.get("/my-delivery-list/:id", async (req, res) => {
+            const { id } = req.params;
+            
+
+            const query = { deliveryManID: id }; // Fetch only users with the role "delivery-man"
+
+            try {
+                const result = await bookParcelCollection.find(query).toArray();
+
+                res.status(200).send(result);
+            } catch (error) {
+                
                 return res.status(500).send({ message: "Internal server error" });
             }
         });
@@ -290,13 +336,10 @@ app.get("/users", async (req, res) => {
 
 
 
-
-        
-
         app.put("/assign-book-parcel", async (req, res) => {
             const deliveryInfo = req.body; // Data sent in the request body
             const id = deliveryInfo.parcelId;
-            console.log(req.body)
+            
 
 
             if (!id) {
@@ -318,13 +361,56 @@ app.get("/users", async (req, res) => {
                     res.status(404).send({ message: "Parcel not found." });
                 }
             } catch (error) {
-                console.error("Error updating parcel:", error);
+                
                 res.status(500).send({ message: "Internal server error." });
             }
         });
 
 
 
+
+        app.get("/delivery-man-reviews", async (req, res) => {
+            const { deliveryManID } = req.query; // Get deliveryManID from the query parameters
+        
+            if (!deliveryManID) {
+                return res.status(400).send({ message: "DeliveryManID is required." });
+            }
+        
+            try {
+                // Query to find all parcels associated with the delivery man
+                const reviews = await bookParcelCollection
+                    .find(
+                        { deliveryManID, feedback: { $exists: true }, rating: { $exists: true } }, // Filter for parcels with feedback and rating
+                        {
+                            projection: {
+                                name: 1,
+                                email: 1,
+                                phoneNumber: 1,
+                                feedback: 1,
+                                rating: 1,
+                                bookingDate: 1,
+                                deliveryDate: 1,
+                                photoURL:1,
+                            },
+                        }
+                    )
+                    .toArray();
+                   
+                    
+                    
+        
+                if (reviews.length === 0) {
+                    return res.status(404).send({ message: "No reviews found for this delivery man." });
+                }
+        
+                // Send the reviews in the response
+                res.status(200).send(reviews);
+            } catch (error) {
+                console.error("Error fetching reviews:", error);
+                res.status(500).send({ message: "Internal server error." });
+            }
+        });
+        
 
 
 
