@@ -62,13 +62,19 @@ async function run() {
             try {
                 // Fetch users with pagination
                 const users = await userCollection.find().skip(skip).limit(limit).toArray();
+                
 
 
                 const enhancedUsers = await Promise.all(
                     users.map(async (user) => {
-                        const parcelCount = await bookParcelCollection.countDocuments({ userId: user._id, status: { $ne: "canceled" } }); // Exclude canceled parcels
+                        const parcelCount = await bookParcelCollection.countDocuments({ 
+                            userId: user._id.toString(), 
+                            status: { $nin: ["canceled", "pending"] } // Exclude "canceled" and "pending"
+                        });
+                         
+                        // Exclude canceled parcels
                         const totalSpent = await bookParcelCollection.aggregate([
-                            { $match: { userId: user._id, status: { $ne: "canceled" } } },
+                            { $match: { userId: user._id.toString(), status: { $nin: ["canceled", "pending"] }  } },
                             { $group: { _id: null, totalCost: { $sum: "$price" } } },
                         ]).toArray();
 
@@ -302,11 +308,36 @@ async function run() {
             const query = { role: "delivery-man" }; // Fetch only users with the role "delivery-man"
 
             try {
+               
                 const deliveryMan = await userCollection.find(query).skip(skip).limit(limit).toArray();
+
+                const enhancedDeliveryMan = await Promise.all(
+                    deliveryMan?.map(async (user) => {
+                        const parcelDelivered = await bookParcelCollection.countDocuments({ 
+                            deliveryManID: user._id.toString(), 
+                            status: { $nin: ["canceled", "pending"] } // Exclude "canceled" and "pending"
+                        });
+                        
+                        // Exclude canceled parcels
+                        const totalReviews = await bookParcelCollection.aggregate([
+                            { $match: { deliveryManID: user._id.toString(), status: { $nin: ["canceled", "pending"] }  } },
+                            { $group: { _id: null, totalRating: { $sum: "$rating" } } },
+                        ]).toArray();                     
+
+                        const phoneNumber = user.phoneNumber || (await userCollection.findOne({ deliveryManID: user._id.toString() }).phoneNumber);
+
+                        return {
+                            ...user,
+                            parcelDelivered: parcelDelivered || 0,
+                            reviewAverage: totalReviews[0]?.totalRating/parcelDelivered || 0,
+                            phoneNumber: phoneNumber || "N/A", // Optional: If no phone number is found in the user data
+                        };
+                    })
+                );
                 const totalDeliveryMan = await userCollection.countDocuments(query); // Use the query to count delivery men
                 const totalPages = Math.ceil(totalDeliveryMan / limit);
 
-                res.status(200).send({ deliveryMan, totalPages, totalDeliveryMan });
+                res.status(200).send({ deliveryMan:enhancedDeliveryMan, totalPages, totalDeliveryMan });
             } catch (error) {
                 
                 return res.status(500).send({ message: "Internal server error" });
