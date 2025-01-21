@@ -199,7 +199,7 @@ async function run() {
 
         app.get("/user/:email", verifyUser, async (req, res) => {
             const query = req.params; 
-            console.log(req.user, query)
+          
             
             if(req.user !== query.email){
                 return res.status(500).send({ message: 'UnAuthorization error' })
