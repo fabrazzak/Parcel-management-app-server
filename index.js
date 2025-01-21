@@ -2,13 +2,18 @@ const express = require('express')
 const app = express()
 const port = process.env.PORT || 5000;
 const cors = require('cors')
+const jwt = require('jsonwebtoken');
+
+
 require('dotenv').config()
 
 app.use(cors())
 app.use(express.json())
-
+const Stripe = require('stripe');
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+
 const uri = `${process.env.DB_URI}`
 
 const client = new MongoClient(uri, {
@@ -21,7 +26,11 @@ const client = new MongoClient(uri, {
 
 
 
+
+
+
 app.get('/', (req, res) => {
+
     res.send('Hello World!')
 })
 
@@ -31,9 +40,59 @@ async function run() {
         const bookParcelCollection = client.db("parcel-management").collection("book-parcel");
 
 
+        // Middleware for verifying JWT
+        const verifyUser = (req, res, next) => {
+            console.log("hello veryfy")
+
+            const token = req.headers.authorization?.split(' ')[1]; // Get the token from "Authorization" header
+            if (!token) {
+                return res.status(401).send({ message: 'Unauthorized: No token provided' });
+            }
+            console.log(token,"token")
+
+            jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+                if (err) {
+                    return res.status(403).send({ message: 'Invalid or expired token' });
+                }
+                
+                req.user = decoded; // Attach user info to the request object
+                console.log(req.user,"hello")
+                next();
+            });
+        };
+
+
+
+        // JWT Token Route
+        app.post('/jwt', (req, res) => {
+            const { email } = req.body;    
+            console.log("hello world ",req.headers)    
+
+            if (!email) {
+                return res.status(400).send({ message: 'Email is required' });
+            }
+
+            const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+            res.status(200).send({ token, message: 'Login successful and login' });
+        });
+
+        // Logout Route
+        app.post('/logout', (req, res) => {
+            res.status(200).send({ message: 'Logged out successfully' });
+        });
+
+
+     
+
+
+
+
+
+
+
         // webUser api start 
 
-        app.post("/users", async (req, res) => {
+        app.post("/users", verifyUser, async (req, res) => {
             const newUser = req.body;
 
             try {
@@ -46,7 +105,7 @@ async function run() {
                 const result = await userCollection.insertOne(newUser);
                 return res.status(201).send(result);
             } catch (error) {
-               
+
                 return res.status(500).send({ message: "Internal server error" });
             }
         });
@@ -62,19 +121,19 @@ async function run() {
             try {
                 // Fetch users with pagination
                 const users = await userCollection.find().skip(skip).limit(limit).toArray();
-                
+
 
 
                 const enhancedUsers = await Promise.all(
                     users.map(async (user) => {
-                        const parcelCount = await bookParcelCollection.countDocuments({ 
-                            userId: user._id.toString(), 
+                        const parcelCount = await bookParcelCollection.countDocuments({
+                            userId: user._id.toString(),
                             status: { $nin: ["canceled", "pending"] } // Exclude "canceled" and "pending"
                         });
-                         
+
                         // Exclude canceled parcels
                         const totalSpent = await bookParcelCollection.aggregate([
-                            { $match: { userId: user._id.toString(), status: { $nin: ["canceled", "pending"] }  } },
+                            { $match: { userId: user._id.toString(), status: { $nin: ["canceled", "pending"] } } },
                             { $group: { _id: null, totalCost: { $sum: "$price" } } },
                         ]).toArray();
 
@@ -94,7 +153,7 @@ async function run() {
 
                 res.status(200).send({ users: enhancedUsers, totalPages, totalUsers });
             } catch (error) {
-            
+
                 return res.status(500).send({ message: "Internal server error" });
             }
         });
@@ -115,7 +174,7 @@ async function run() {
                     res.status(404).send({ message: "User not found" });
                 }
             } catch (error) {
-                
+
                 res.status(500).send({ message: "Internal server error" });
             }
         });
@@ -131,7 +190,7 @@ async function run() {
                     res.status(404).send({ message: "User not found" });
                 }
             } catch (error) {
-               
+
                 res.status(500).send({ message: "Internal server error" });
             }
         });
@@ -147,7 +206,7 @@ async function run() {
 
                 res.status(200).send(user);
             } catch (error) {
-               
+
                 return res.status(500).send({ message: 'Internal server error' });
             }
         });
@@ -168,7 +227,7 @@ async function run() {
                 return res.status(201).send(result)
             }
             catch (error) {
-             
+
                 return res.status(5000).send({ message: "Internal server error" })
 
             }
@@ -187,7 +246,7 @@ async function run() {
                 // Send the found user
                 res.status(200).send(user);
             } catch (error) {
-               
+
                 return res.status(500).send({ message: 'Internal server error' });
             }
         });
@@ -215,7 +274,7 @@ async function run() {
                     res.status(404).send({ message: "Book Parcel not found" });
                 }
             } catch (error) {
-                
+
                 res.status(500).send({ message: "Internal server error" });
             }
         });
@@ -241,12 +300,12 @@ async function run() {
                 const result = await bookParcelCollection.updateOne(query, updatePayload);
 
                 if (result.matchedCount > 0) {
-                    res.status(200).send({ message: "Parcel information updated successfully." });
+                    res.status(200).send({ message: "Parcel information updated successfully.", success: true });
                 } else {
                     res.status(404).send({ message: "Parcel not found." });
                 }
             } catch (error) {
-              
+
                 res.status(500).send({ message: "Internal server error." });
             }
         });
@@ -255,18 +314,18 @@ async function run() {
 
         app.put("/book-parcel-reviews", async (req, res) => {
             const { id, ...deliveryInfo } = req.body;
-                        
-        
+
+
             if (!id) {
                 return res.status(400).send({ message: "Parcel ID is required." });
             }
-        
+
             const query = { _id: new ObjectId(id) }; // Convert `id` to MongoDB ObjectId
             const updatePayload = { $set: deliveryInfo };
-        
+
             try {
                 const result = await bookParcelCollection.updateOne(query, updatePayload);
-        
+
                 if (result.matchedCount > 0) {
                     res.status(200).send({ message: "Parcel information updated successfully." });
                 } else {
@@ -277,7 +336,7 @@ async function run() {
                 res.status(500).send({ message: "Internal server error." });
             }
         });
-        
+
 
 
 
@@ -293,7 +352,7 @@ async function run() {
                 // Send the found user
                 res.status(200).send(user);
             } catch (error) {
-                
+
                 return res.status(500).send({ message: 'Internal server error' });
             }
         });
@@ -308,48 +367,78 @@ async function run() {
             const query = { role: "delivery-man" }; // Fetch only users with the role "delivery-man"
 
             try {
-               
+                // Fetch paginated delivery men
                 const deliveryMan = await userCollection.find(query).skip(skip).limit(limit).toArray();
+                const countReviewsWithoutZeroRating = await bookParcelCollection.countDocuments({ rating: { $ne: 0 } });
 
+
+
+
+                // Enhance delivery men with additional details
                 const enhancedDeliveryMan = await Promise.all(
                     deliveryMan?.map(async (user) => {
-                        const parcelDelivered = await bookParcelCollection.countDocuments({ 
-                            deliveryManID: user._id.toString(), 
-                            status: { $nin: ["canceled", "pending"] } // Exclude "canceled" and "pending"
+                        const parcelDelivered = await bookParcelCollection.countDocuments({
+                            deliveryManID: user._id.toString(),
+                            status: { $nin: ["canceled", "pending"] }, // Exclude "canceled" and "pending"
                         });
-                        
-                        // Exclude canceled parcels
-                        const totalReviews = await bookParcelCollection.aggregate([
-                            { $match: { deliveryManID: user._id.toString(), status: { $nin: ["canceled", "pending"] }  } },
-                            { $group: { _id: null, totalRating: { $sum: "$rating" } } },
-                        ]).toArray();                     
 
-                        const phoneNumber = user.phoneNumber || (await userCollection.findOne({ deliveryManID: user._id.toString() }).phoneNumber);
+                        // Aggregate total ratings
+                        const totalReviews = await bookParcelCollection
+                            .aggregate([
+                                {
+                                    $match: {
+                                        deliveryManID: user._id.toString(),
+                                        status: { $nin: ["canceled", "pending"] },
+                                    },
+                                },
+                                {
+                                    $group: {
+                                        _id: null,
+                                        totalRating: { $sum: { $ifNull: ["$rating", 0] } }, // Ensure null safety for ratings
+
+                                    },
+                                },
+                            ])
+                            .toArray();
+                        console.log(totalReviews)
+                        // Calculate average rating and ensure no division by zero
+                        const averageRating = parcelDelivered > 0 ? (totalReviews[0]?.totalRating || 0) / countReviewsWithoutZeroRating : 0;
+
+                        // Retrieve phone number
+                        const phoneNumber =
+                            user.phoneNumber ||
+                            (await userCollection.findOne({ _id: user._id }, { projection: { phoneNumber: 1 } }))
+                                ?.phoneNumber ||
+                            "N/A";
 
                         return {
                             ...user,
                             parcelDelivered: parcelDelivered || 0,
-                            reviewAverage: totalReviews[0]?.totalRating/parcelDelivered || 0,
-                            phoneNumber: phoneNumber || "N/A", // Optional: If no phone number is found in the user data
+                            reviewAverage: averageRating,
+                            phoneNumber,
                         };
                     })
                 );
-                const totalDeliveryMan = await userCollection.countDocuments(query); // Use the query to count delivery men
+
+                // Count total delivery men
+                const totalDeliveryMan = await userCollection.countDocuments(query);
                 const totalPages = Math.ceil(totalDeliveryMan / limit);
 
-                res.status(200).send({ deliveryMan:enhancedDeliveryMan, totalPages, totalDeliveryMan });
+                // Send the response
+                res.status(200).send({ deliveryMan: enhancedDeliveryMan, totalPages, totalDeliveryMan });
             } catch (error) {
-                
-                return res.status(500).send({ message: "Internal server error" });
+                console.error("Error fetching delivery man data:", error);
+                res.status(500).send({ message: "Internal server error" });
             }
         });
+
 
 
         // my delivery list 
 
         app.get("/my-delivery-list/:id", async (req, res) => {
             const { id } = req.params;
-            
+
 
             const query = { deliveryManID: id }; // Fetch only users with the role "delivery-man"
 
@@ -358,7 +447,7 @@ async function run() {
 
                 res.status(200).send(result);
             } catch (error) {
-                
+
                 return res.status(500).send({ message: "Internal server error" });
             }
         });
@@ -371,7 +460,7 @@ async function run() {
         app.put("/assign-book-parcel", async (req, res) => {
             const deliveryInfo = req.body; // Data sent in the request body
             const id = deliveryInfo.parcelId;
-            
+
 
 
             if (!id) {
@@ -393,7 +482,7 @@ async function run() {
                     res.status(404).send({ message: "Parcel not found." });
                 }
             } catch (error) {
-                
+
                 res.status(500).send({ message: "Internal server error." });
             }
         });
@@ -403,40 +492,40 @@ async function run() {
 
         app.get("/delivery-man-reviews", async (req, res) => {
             const { deliveryManID } = req.query; // Get deliveryManID from the query parameters
-        
+
             // Validate the deliveryManID format
             if (!deliveryManID || !ObjectId.isValid(deliveryManID)) {
                 return res.status(400).send({ message: "Valid DeliveryManID is required." });
             }
-        
+
             try {
                 // Query to find all parcels associated with the delivery man
-                const reviews = await bookParcelCollection .find(
-                        { 
-                            deliveryManID, 
-                            feedback: { $exists: true }, 
-                            rating: { $exists: true } 
+                const reviews = await bookParcelCollection.find(
+                    {
+                        deliveryManID,
+                        feedback: { $exists: true },
+                        rating: { $exists: true }
+                    },
+                    {
+                        projection: {
+                            name: 1,
+                            email: 1,
+                            phoneNumber: 1,
+                            feedback: 1,
+                            rating: 1,
+                            bookingDate: 1,
+                            deliveryDate: 1,
+                            photoURL: 1,
                         },
-                        {
-                            projection: {
-                                name: 1,
-                                email: 1,
-                                phoneNumber: 1,
-                                feedback: 1,
-                                rating: 1,
-                                bookingDate: 1,
-                                deliveryDate: 1,
-                                photoURL: 1,
-                            },
-                        }
-                    )
+                    }
+                )
                     .toArray();
-            
-        
+
+
                 if (reviews.length === 0) {
                     return res.status(404).send({ message: "No reviews found for this delivery man." });
                 }
-        
+
                 // Send the reviews in the response
                 res.status(200).send(reviews);
             } catch (error) {
@@ -444,14 +533,74 @@ async function run() {
                 res.status(500).send({ message: "Internal server error." });
             }
         });
-        
 
 
+        app.get("/chart-data", async (req, res) => {
+            try {
+                // Total parcels by status
+                const parcelsByStatus = await bookParcelCollection.aggregate([
+                    {
+                        $group: {
+                            _id: "$status", // Group by status
+                            count: { $sum: 1 }, // Count total parcels per status
+                        },
+                    },
+                ]).toArray();
+
+                // Monthly data for parcels booked
+                const monthlyParcels = await bookParcelCollection.aggregate([
+                    {
+                        $group: {
+                            _id: {
+                                year: { $year: { $toDate: "$deliveryDate" } }, // Extract year
+                                month: { $month: { $toDate: "$deliveryDate" } }, // Extract month
+                            },
+                            totalParcels: { $sum: 1 }, // Total parcels booked per month
+                        },
+                    },
+                    { $sort: { "_id.year": 1, "_id.month": 1 } }, // Sort by year and month
+                ]).toArray();
+
+                // Prepare response data
+                const chartData = {
+                    parcelsByStatus: parcelsByStatus.map(item => ({
+                        status: item._id,
+                        count: item.count,
+                    })),
+                    monthlyParcels: monthlyParcels.map(item => ({
+                        month: `${item._id.year}-${String(item._id.month).padStart(2, "0")}`, // Format as "YYYY-MM"
+                        totalParcels: item.totalParcels,
+                    })),
+                };
+
+                res.status(200).send(chartData);
+            } catch (error) {
+                console.error("Error fetching chart data:", error);
+                res.status(500).send({ message: "Internal server error" });
+            }
+        });
 
 
+        app.post('/create-payment-intent', async (req, res) => {
+            try {
+                const { amount, currency } = req.body;
 
+                if (!amount || !currency) {
+                    return res.status(400).json({ error: 'Amount and currency are required.' });
+                }
 
+                const paymentIntent = await stripe.paymentIntents.create({
+                    amount,
+                    currency,
+                    payment_method_types: ['card'],
+                });
 
+                res.status(200).json({ clientSecret: paymentIntent.client_secret });
+            } catch (error) {
+                console.error('Error creating payment intent:', error);
+                res.status(500).json({ error: 'Internal Server Error' });
+            }
+        });
 
 
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
