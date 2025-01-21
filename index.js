@@ -41,22 +41,21 @@ async function run() {
 
 
         // Middleware for verifying JWT
-        const verifyUser = (req, res, next) => {
-            console.log("hello veryfy")
-
+        const verifyUser = (req, res, next) => {            
+            
             const token = req.headers.authorization?.split(' ')[1]; // Get the token from "Authorization" header
+        
             if (!token) {
                 return res.status(401).send({ message: 'Unauthorized: No token provided' });
             }
-            console.log(token,"token")
+           
 
             jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
                 if (err) {
                     return res.status(403).send({ message: 'Invalid or expired token' });
                 }
                 
-                req.user = decoded; // Attach user info to the request object
-                console.log(req.user,"hello")
+                req.user = decoded.email; // Attach user info to the request object               
                 next();
             });
         };
@@ -65,8 +64,8 @@ async function run() {
 
         // JWT Token Route
         app.post('/jwt', (req, res) => {
-            const { email } = req.body;    
-            console.log("hello world ",req.headers)    
+            const { email } = req.body;   
+            
 
             if (!email) {
                 return res.status(400).send({ message: 'Email is required' });
@@ -92,8 +91,9 @@ async function run() {
 
         // webUser api start 
 
-        app.post("/users", verifyUser, async (req, res) => {
+        app.post("/users", async (req, res) => {
             const newUser = req.body;
+            
 
             try {
 
@@ -114,6 +114,7 @@ async function run() {
 
         // API to get all users with pagination and additional functionality
         app.get("/users", async (req, res) => {
+            
             const page = parseInt(req.query.page) || 1; // Default to page 1
             const limit = parseInt(req.query.limit) || 5; // Default to 5 users per page
             const skip = (page - 1) * limit;
@@ -196,11 +197,13 @@ async function run() {
         });
 
 
-        app.get("/user/:email", async (req, res) => {
-
-            const query = req.params;
-
-
+        app.get("/user/:email", verifyUser, async (req, res) => {
+            const query = req.params; 
+            console.log(req.user, query)
+            
+            if(req.user !== query.email){
+                return res.status(500).send({ message: 'UnAuthorization error' })
+            }
             try {
                 const user = await userCollection.findOne(query)
 
@@ -234,8 +237,11 @@ async function run() {
         })
 
 
-        app.get("/book-parcels/:email", async (req, res) => {
+        app.get("/book-parcels/:email",verifyUser, async (req, res) => {
             const { email } = req.params;
+            if(req.user !== email){
+                return res.status(500).send({ message: 'UnAuthorization error' })
+            }
             try {
                 const user = await bookParcelCollection.find({ email }).toArray();
 
@@ -284,6 +290,7 @@ async function run() {
         app.put("/update-book-parcel", async (req, res) => {
             const parcelInfo = req.body; // Data sent in the request body
             const id = parcelInfo._id;
+           
 
 
             if (!id) {
@@ -291,6 +298,7 @@ async function run() {
             }
 
             const { _id, ...updateData } = parcelInfo;
+            console.log(updateData)
 
             // Construct the query and update payload
             const query = { _id: new ObjectId(id) };
