@@ -114,52 +114,64 @@ async function run() {
 
         // API to get all users with pagination and additional functionality
         app.get("/users", async (req, res) => {
-            
             const page = parseInt(req.query.page) || 1; // Default to page 1
             const limit = parseInt(req.query.limit) || 5; // Default to 5 users per page
             const skip = (page - 1) * limit;
-
+          
             try {
-                // Fetch users with pagination
-                const users = await userCollection.find().skip(skip).limit(limit).toArray();
-
-
-
-                const enhancedUsers = await Promise.all(
-                    users.map(async (user) => {
-                        const parcelCount = await bookParcelCollection.countDocuments({
-                            userId: user._id.toString(),
-                            status: { $nin: ["canceled", "pending"] } // Exclude "canceled" and "pending"
-                        });
-
-                        // Exclude canceled parcels
-                        const totalSpent = await bookParcelCollection.aggregate([
-                            { $match: { userId: user._id.toString(), status: { $nin: ["canceled", "pending"] } } },
-                            { $group: { _id: null, totalCost: { $sum: "$price" } } },
-                        ]).toArray();
-
-                        const phoneNumber = user.phoneNumber || (await bookParcelCollection.findOne({ userId: user._id }).phoneNumber);
-
-                        return {
-                            ...user,
-                            parcelsBooked: parcelCount || 0,
-                            totalSpentAmount: totalSpent[0]?.totalCost || 0,
-                            phoneNumber: phoneNumber || "N/A", // Optional: If no phone number is found in the user data
-                        };
-                    })
-                );
-
-                const totalUsers = await userCollection.countDocuments();
-                const totalPages = Math.ceil(totalUsers / limit);
-
-                res.status(200).send({ users: enhancedUsers, totalPages, totalUsers });
+              // Fetch users with pagination
+              const users = await userCollection.find().skip(skip).limit(limit).toArray();
+          
+              // Enhance user data
+              const enhancedUsers = await Promise.all(
+                users.map(async (user) => {
+                  // Fetch the phone number from bookParcelCollection based on userId
+                  const bookParcel = await bookParcelCollection.findOne({
+                    userId: user._id.toString(),
+                  });
+          
+                  const phoneNumber = bookParcel?.phoneNumber || "N/A"; // Default to "N/A" if no phone number is found
+          
+                  // Count parcels excluding "canceled" and "pending" statuses
+                  const parcelCount = await bookParcelCollection.countDocuments({
+                    userId: user._id.toString(),
+                    status: { $nin: ["canceled", "pending"] },
+                  });
+          
+                  // Calculate total spent amount
+                  const totalSpent = await bookParcelCollection
+                    .aggregate([
+                      {
+                        $match: {
+                          userId: user._id.toString(),
+                          status: { $nin: ["canceled", "pending"] },
+                        },
+                      },
+                      {
+                        $group: { _id: null, totalCost: { $sum: "$price" } },
+                      },
+                    ])
+                    .toArray();
+                    console.log
+          
+                  return {
+                    ...user,
+                    phoneNumber,
+                    parcelsBooked: parcelCount || 0,
+                    totalSpentAmount: totalSpent[0]?.totalCost || 0,
+                  };
+                })
+              );
+          
+              const totalUsers = await userCollection.countDocuments();
+              const totalPages = Math.ceil(totalUsers / limit);
+          
+              res.status(200).send({ users: enhancedUsers, totalPages, totalUsers });
             } catch (error) {
-
-                return res.status(500).send({ message: "Internal server error" });
+              console.error("Error fetching users:", error);
+              return res.status(500).send({ message: "Internal server error" });
             }
-        });
-
-
+          });
 
 
 
