@@ -626,25 +626,22 @@ async function run() {
 
         app.get('/top-delivery-men', async (req, res) => {
             try {
-               // Replace 'parcels' with your collection name
-          
+              // Aggregate delivery data from bookParcelCollection
               const topDeliveryMen = await bookParcelCollection.aggregate([
                 {
                   $match: { status: 'delivered' }, // Filter only delivered parcels
                 },
                 {
                   $group: {
-                    _id: '$deliveryManID',
-                    name: { $first: '$name' },
-                    photoURL: { $first: '$photoURL' },
-                    totalParcels: { $sum: 1 },
-                    averageRating: { $avg: '$rating' },
+                    _id: '$deliveryManID', // Group by deliveryManID
+                    totalParcels: { $sum: 1 }, // Count the number of delivered parcels
+                    averageRating: { $avg: '$rating' }, // Calculate average rating
                   },
                 },
                 {
                   $sort: {
-                    totalParcels: -1, // Sort by total parcels delivered
-                    averageRating: -1, // Then by average rating
+                    totalParcels: -1, // Sort by total parcels delivered (descending)
+                    averageRating: -1, // Then by average rating (descending)
                   },
                 },
                 {
@@ -652,7 +649,24 @@ async function run() {
                 },
               ]).toArray();
           
-              res.status(200).json(topDeliveryMen);
+              // Fetch detailed user information from userCollection for each deliveryManID
+              const detailedDeliveryMen = await Promise.all(
+                topDeliveryMen.map(async (deliveryMan) => {
+                  const user = await userCollection.findOne({ _id: new ObjectId(deliveryMan._id) });
+          
+                  return {
+                    deliveryManID: deliveryMan._id,
+                    name: user?.displayName || 'Unknown',
+                    email: user?.email || 'Unknown',
+                    photoURL: user?.photoURL || '',
+                    role: user?.role || 'Unknown',
+                    totalParcels: deliveryMan.totalParcels,
+                    averageRating: deliveryMan.averageRating.toFixed(2), // Format average rating
+                  };
+                })
+              );
+           console.log(topDeliveryMen)
+              res.status(200).json(detailedDeliveryMen);
             } catch (error) {
               console.error('Error fetching top delivery men:', error);
               res.status(500).json({ error: 'Failed to fetch top delivery men' });
