@@ -611,6 +611,51 @@ async function run() {
         });
 
 
+
+        app.get('/top-delivery-men', async (req, res) => {
+            try {
+               // Replace 'parcels' with your collection name
+          
+              const topDeliveryMen = await bookParcelCollection.aggregate([
+                {
+                  $match: { status: 'delivered' }, // Filter only delivered parcels
+                },
+                {
+                  $group: {
+                    _id: '$deliveryManID',
+                    name: { $first: '$name' },
+                    photoURL: { $first: '$photoURL' },
+                    totalParcels: { $sum: 1 },
+                    averageRating: { $avg: '$rating' },
+                  },
+                },
+                {
+                  $sort: {
+                    totalParcels: -1, // Sort by total parcels delivered
+                    averageRating: -1, // Then by average rating
+                  },
+                },
+                {
+                  $limit: 3, // Limit to top 3 delivery men
+                },
+              ]).toArray();
+          
+              res.status(200).json(topDeliveryMen);
+            } catch (error) {
+              console.error('Error fetching top delivery men:', error);
+              res.status(500).json({ error: 'Failed to fetch top delivery men' });
+            }
+          });
+          
+
+
+
+
+
+
+
+
+
         // console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
     } finally {
