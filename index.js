@@ -31,30 +31,32 @@ const client = new MongoClient(uri, {
 
 app.get('/', (req, res) => {
 
-    res.send('Hello World!')
+    res.send('Parcel Management app')
 })
 
 async function run() {
     try {
         const userCollection = client.db("parcel-management").collection("users");
+        const blogsCollection = client.db("parcel-management").collection("blogs");
         const bookParcelCollection = client.db("parcel-management").collection("book-parcel");
+        const dhriServicers = client.db("parcel-management").collection("services");
 
 
         // Middleware for verifying JWT
-        const verifyUser = (req, res, next) => {            
-            
+        const verifyUser = (req, res, next) => {
+
             const token = req.headers.authorization?.split(' ')[1]; // Get the token from "Authorization" header
-        
+
             if (!token) {
                 return res.status(401).send({ message: 'Unauthorized: No token provided' });
             }
-           
+
 
             jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
                 if (err) {
                     return res.status(403).send({ message: 'Invalid or expired token' });
                 }
-                
+
                 req.user = decoded.email; // Attach user info to the request object               
                 next();
             });
@@ -64,8 +66,8 @@ async function run() {
 
         // JWT Token Route
         app.post('/jwt', (req, res) => {
-            const { email } = req.body;   
-            
+            const { email } = req.body;
+
 
             if (!email) {
                 return res.status(400).send({ message: 'Email is required' });
@@ -81,7 +83,7 @@ async function run() {
         });
 
 
-     
+
 
 
 
@@ -93,7 +95,7 @@ async function run() {
 
         app.post("/users", async (req, res) => {
             const newUser = req.body;
-            
+
 
             try {
 
@@ -111,67 +113,160 @@ async function run() {
         });
 
 
+        app.get("/blogs", async (req, res) => {
+            const page = parseInt(req.query.page) || 1; // Default to page 1
+            const limit = parseInt(req.query.limit) || 6; // Default to 5 blogs per page
+            const skip = (page - 1) * limit;
+
+            try {
+                // Fetch blogs with pagination
+                const blogs = await blogsCollection.find().skip(skip).limit(limit).toArray();
+
+                // Enhance blog data (if necessary)
+                const enhancedBlogs = blogs.map((blog) => {
+                    // Here you can perform any additional logic to enhance the blog data
+                    // For example, you can add tags, comments count, or other metadata
+                    return {
+                        ...blog,
+                        // Example: Add a random 'readTime' for demonstration
+                        readTime: Math.floor(Math.random() * 10) + 3, // Random read time between 3-12 minutes
+                    };
+                });
+
+                const totalBlogs = await blogsCollection.countDocuments();
+                const totalPages = Math.ceil(totalBlogs / limit);
+
+                res.status(200).send({
+                    blogs: enhancedBlogs,
+                    totalPages,
+                    totalBlogs,
+                });
+            } catch (error) {
+                console.error("Error fetching blogs:", error);
+                return res.status(500).send({ message: "Internal server error" });
+            }
+        });
+
+
+
+        app.get('/api/services', async (req, res) => {
+            try {
+                const services = await dhriServicers.find();
+                res.json(services);
+            } catch (error) {
+                res.status(500).json({ message: "Server Error", error });
+            }
+        });
+
+
+        app.get('/api/services/:id', async (req, res) => {
+            const { id } = req.params;
+        
+            try {
+                const service = await dhriServicers.findById(id);
+        
+                if (!service) {
+                    return res.status(404).json({ message: "Service not found" });
+                }
+        
+                res.json(service);
+            } catch (error) {
+                res.status(500).json({ message: "Server Error", error });
+            }
+        });
+
+
+
+        // Assuming you have already set up MongoDB connection and `blogsCollection` is defined
+
+        app.get("/blogs/:blogId", async (req, res) => {
+            const { blogId } = req.params; // Retrieve blogId from the URL parameter
+
+            try {
+                // Fetch a single blog by its ID
+                const blog = await blogsCollection.findOne({ id: parseInt(blogId) });
+
+                if (!blog) {
+                    return res.status(404).send({ message: "Blog not found!" });
+                }
+
+                // Enhance blog data (optional)
+                const enhancedBlog = {
+                    ...blog,
+                    // Example: Add a random 'readTime' for demonstration
+                    readTime: Math.floor(Math.random() * 10) + 3, // Random read time between 3-12 minutes
+                };
+
+                res.status(200).send(enhancedBlog);
+            } catch (error) {
+                console.error("Error fetching blog:", error);
+                return res.status(500).send({ message: "Internal server error" });
+            }
+        });
+
+
+
 
         // API to get all users with pagination and additional functionality
         app.get("/users", async (req, res) => {
             const page = parseInt(req.query.page) || 1; // Default to page 1
             const limit = parseInt(req.query.limit) || 5; // Default to 5 users per page
             const skip = (page - 1) * limit;
-          
+
             try {
-              // Fetch users with pagination
-              const users = await userCollection.find().skip(skip).limit(limit).toArray();
-          
-              // Enhance user data
-              const enhancedUsers = await Promise.all(
-                users.map(async (user) => {
-                  // Fetch the phone number from bookParcelCollection based on userId
-                  const bookParcel = await bookParcelCollection.findOne({
-                    userId: user._id.toString(),
-                  });
-          
-                  const phoneNumber = bookParcel?.phoneNumber || "N/A"; // Default to "N/A" if no phone number is found
-          
-                  // Count parcels excluding "canceled" and "pending" statuses
-                  const parcelCount = await bookParcelCollection.countDocuments({
-                    userId: user._id.toString(),
-                    status: { $nin: ["canceled", "pending"] },
-                  });
-          
-                  // Calculate total spent amount
-                  const totalSpent = await bookParcelCollection
-                    .aggregate([
-                      {
-                        $match: {
-                          userId: user._id.toString(),
-                          status: { $nin: ["canceled", "pending"] },
-                        },
-                      },
-                      {
-                        $group: { _id: null, totalCost: { $sum: "$price" } },
-                      },
-                    ])
-                    .toArray();
-                    console.log
-          
-                  return {
-                    ...user,
-                    phoneNumber,
-                    parcelsBooked: parcelCount || 0,
-                    totalSpentAmount: totalSpent[0]?.totalCost || 0,
-                  };
-                })
-              );
-          
-              const totalUsers = await userCollection.countDocuments();
-              const totalPages = Math.ceil(totalUsers / limit);
-          
-              res.status(200).send({ users: enhancedUsers, totalPages, totalUsers });
+                // Fetch users with pagination
+                const users = await userCollection.find().skip(skip).limit(limit).toArray();
+
+                // Enhance user data
+                const enhancedUsers = await Promise.all(
+                    users.map(async (user) => {
+                        // Fetch the phone number from bookParcelCollection based on userId
+                        const bookParcel = await bookParcelCollection.findOne({
+                            userId: user._id.toString(),
+                        });
+
+                        const phoneNumber = bookParcel?.phoneNumber || "N/A"; // Default to "N/A" if no phone number is found
+
+                        // Count parcels excluding "canceled" and "pending" statuses
+                        const parcelCount = await bookParcelCollection.countDocuments({
+                            userId: user._id.toString(),
+                            status: { $nin: ["canceled", "pending"] },
+                        });
+
+                        // Calculate total spent amount
+                        const totalSpent = await bookParcelCollection
+                            .aggregate([
+                                {
+                                    $match: {
+                                        userId: user._id.toString(),
+                                        status: { $nin: ["canceled", "pending"] },
+                                    },
+                                },
+                                {
+                                    $group: { _id: null, totalCost: { $sum: "$price" } },
+                                },
+                            ])
+                            .toArray();
+                        console.log
+
+                        return {
+                            ...user,
+                            phoneNumber,
+                            parcelsBooked: parcelCount || 0,
+                            totalSpentAmount: totalSpent[0]?.totalCost || 0,
+                        };
+                    })
+                );
+
+                const totalUsers = await userCollection.countDocuments();
+                const totalPages = Math.ceil(totalUsers / limit);
+
+                res.status(200).send({ users: enhancedUsers, totalPages, totalUsers });
             } catch (error) {
-              console.error("Error fetching users:", error);
-              return res.status(500).send({ message: "Internal server error" });
+                console.error("Error fetching users:", error);
+                return res.status(500).send({ message: "Internal server error" });
             }
-          });
+        });
 
 
 
@@ -210,10 +305,10 @@ async function run() {
 
 
         app.get("/user/:email", verifyUser, async (req, res) => {
-            const query = req.params; 
-          
-            
-            if(req.user !== query.email){
+            const query = req.params;
+
+
+            if (req.user !== query.email) {
                 return res.status(500).send({ message: 'UnAuthorization error' })
             }
             try {
@@ -249,9 +344,9 @@ async function run() {
         })
 
 
-        app.get("/book-parcels/:email",verifyUser, async (req, res) => {
+        app.get("/book-parcels/:email", verifyUser, async (req, res) => {
             const { email } = req.params;
-            if(req.user !== email){
+            if (req.user !== email) {
                 return res.status(500).send({ message: 'UnAuthorization error' })
             }
             try {
@@ -302,7 +397,7 @@ async function run() {
         app.put("/update-book-parcel", async (req, res) => {
             const parcelInfo = req.body; // Data sent in the request body
             const id = parcelInfo._id;
-           
+
 
 
             if (!id) {
@@ -626,53 +721,53 @@ async function run() {
 
         app.get('/top-delivery-men', async (req, res) => {
             try {
-              // Aggregate delivery data from bookParcelCollection
-              const topDeliveryMen = await bookParcelCollection.aggregate([
-                {
-                  $match: { status: 'delivered' }, // Filter only delivered parcels
-                },
-                {
-                  $group: {
-                    _id: '$deliveryManID', // Group by deliveryManID
-                    totalParcels: { $sum: 1 }, // Count the number of delivered parcels
-                    averageRating: { $avg: '$rating' }, // Calculate average rating
-                  },
-                },
-                {
-                  $sort: {
-                    totalParcels: -1, // Sort by total parcels delivered (descending)
-                    averageRating: -1, // Then by average rating (descending)
-                  },
-                },
-                {
-                  $limit: 3, // Limit to top 3 delivery men
-                },
-              ]).toArray();
-          
-              // Fetch detailed user information from userCollection for each deliveryManID
-              const detailedDeliveryMen = await Promise.all(
-                topDeliveryMen.map(async (deliveryMan) => {
-                  const user = await userCollection.findOne({ _id: new ObjectId(deliveryMan._id) });
-          
-                  return {
-                    deliveryManID: deliveryMan._id,
-                    name: user?.displayName || 'Unknown',
-                    email: user?.email || 'Unknown',
-                    photoURL: user?.photoURL || '',
-                    role: user?.role || 'Unknown',
-                    totalParcels: deliveryMan.totalParcels,
-                    averageRating: deliveryMan.averageRating.toFixed(2), // Format average rating
-                  };
-                })
-              );
-           console.log(topDeliveryMen)
-              res.status(200).json(detailedDeliveryMen);
+                // Aggregate delivery data from bookParcelCollection
+                const topDeliveryMen = await bookParcelCollection.aggregate([
+                    {
+                        $match: { status: 'delivered' }, // Filter only delivered parcels
+                    },
+                    {
+                        $group: {
+                            _id: '$deliveryManID', // Group by deliveryManID
+                            totalParcels: { $sum: 1 }, // Count the number of delivered parcels
+                            averageRating: { $avg: '$rating' }, // Calculate average rating
+                        },
+                    },
+                    {
+                        $sort: {
+                            totalParcels: -1, // Sort by total parcels delivered (descending)
+                            averageRating: -1, // Then by average rating (descending)
+                        },
+                    },
+                    {
+                        $limit: 3, // Limit to top 3 delivery men
+                    },
+                ]).toArray();
+
+                // Fetch detailed user information from userCollection for each deliveryManID
+                const detailedDeliveryMen = await Promise.all(
+                    topDeliveryMen.map(async (deliveryMan) => {
+                        const user = await userCollection.findOne({ _id: new ObjectId(deliveryMan._id) });
+
+                        return {
+                            deliveryManID: deliveryMan._id,
+                            name: user?.displayName || 'Unknown',
+                            email: user?.email || 'Unknown',
+                            photoURL: user?.photoURL || '',
+                            role: user?.role || 'Unknown',
+                            totalParcels: deliveryMan.totalParcels,
+                            averageRating: deliveryMan.averageRating.toFixed(2), // Format average rating
+                        };
+                    })
+                );
+                console.log(topDeliveryMen)
+                res.status(200).json(detailedDeliveryMen);
             } catch (error) {
-              console.error('Error fetching top delivery men:', error);
-              res.status(500).json({ error: 'Failed to fetch top delivery men' });
+                console.error('Error fetching top delivery men:', error);
+                res.status(500).json({ error: 'Failed to fetch top delivery men' });
             }
-          });
-          
+        });
+
 
 
 
